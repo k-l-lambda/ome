@@ -66,6 +66,13 @@ func NewScout(ctx context.Context, nodeName string,
 	if !ok {
 		instanceType = nodeInfo.Labels[constants.DeprecatedNodeInstanceShapeLabel]
 	}
+
+	// If no instance-type label exists (e.g., bare-metal nodes), use a default shape
+	if instanceType == "" {
+		logger.Info("No instance-type label found on node, defaulting to 'bare-metal'")
+		instanceType = "bare-metal"
+	}
+
 	nodeShapeAlias, err := utils.GetInstanceTypeShortName(instanceType)
 	if err != nil {
 		return nil, err

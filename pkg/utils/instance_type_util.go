@@ -50,6 +50,11 @@ func GetNodeInstanceType(logger logging.Interface) (string, error) {
 }
 
 func GetInstanceTypeShortName(currentInstanceType string) (string, error) {
+	// Handle empty instance type (bare-metal or missing label)
+	if currentInstanceType == "" {
+		return "bare-metal", nil
+	}
+
 	if shortName, ok := instanceTypeMap[currentInstanceType]; ok {
 		return shortName, nil
 	}
