@@ -48,8 +48,8 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     -o manager ./cmd/manager
 
 # Use distroless cc image for CGO binaries with C dependencies
-# Note: We need cc-debian11 which includes libc, libssl, and other C libraries required by CGO (for XET library)
-FROM gcr.io/distroless/cc-debian11:nonroot
+# Note: We need cc-debian12 (Bookworm) to match golang:1.24 base which uses OpenSSL 3.x
+FROM gcr.io/distroless/cc-debian12:nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532
