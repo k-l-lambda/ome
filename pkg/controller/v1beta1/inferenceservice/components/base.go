@@ -91,10 +91,26 @@ func UpdateVolumeMounts(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 	// Add model volume mount if base model is specified and it's necessary
 	if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModel.Storage.Path != nil && b.BaseModelMeta != nil {
 		if isvcutils.IsOriginalModelVolumeMountNecessary(objectMeta.Annotations) {
+			// Check for PVC storage and add subPath if specified
+			subPath := ""
+			mountPath := *b.BaseModel.Storage.Path
+
+			if storageType, ok := objectMeta.Annotations["ome.io/storage-type"]; ok && storageType == "pvc" {
+				subPath = objectMeta.Annotations["ome.io/pvc-subpath"]
+				// Override mount path if specified
+				if customMountPath, ok := objectMeta.Annotations["ome.io/mount-path"]; ok && customMountPath != "" {
+					mountPath = customMountPath
+				}
+				b.Log.Info("Setting volume mount for PVC storage",
+					"mountPath", mountPath,
+					"subPath", subPath)
+			}
+
 			vm := corev1.VolumeMount{
 				Name:      b.BaseModelMeta.Name,
-				MountPath: *b.BaseModel.Storage.Path,
+				MountPath: mountPath,
 				ReadOnly:  true,
+				SubPath:   subPath,
 			}
 			isvcutils.AppendVolumeMount(container, &vm)
 		}
@@ -209,7 +225,17 @@ func UpdateEnvVariables(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 }
 
 // UpdatePodSpecNodeSelector updates pod spec with node selector for model scheduling
-func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceService, podSpec *corev1.PodSpec) {
+func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceService, podSpec *corev1.PodSpec, objectMeta *metav1.ObjectMeta) {
+	// Skip node selector for PVC storage
+	if objectMeta != nil {
+		if storageType, ok := objectMeta.Annotations["ome.io/storage-type"]; ok && storageType == "pvc" {
+			b.Log.Info("Using PVC storage, skipping node selector",
+				"inferenceService", isvc.Name,
+				"namespace", isvc.Namespace)
+			return
+		}
+	}
+
 	// Only add node selector if we have a base model
 	if b.BaseModel == nil || b.BaseModelMeta == nil {
 		return
@@ -261,8 +287,32 @@ func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceSe
 
 // UpdatePodSpecVolumes updates pod spec with common volumes
 func UpdatePodSpecVolumes(b *BaseComponentFields, isvc *v1beta1.InferenceService, podSpec *corev1.PodSpec, objectMeta *metav1.ObjectMeta) {
-	// Add model volume if base model is specified
-	if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModel.Storage.Path != nil && b.BaseModelMeta != nil {
+	// Check for PVC storage annotation
+	if storageType, ok := objectMeta.Annotations["ome.io/storage-type"]; ok && storageType == "pvc" {
+		pvcName := objectMeta.Annotations["ome.io/pvc-name"]
+		if pvcName == "" {
+			b.Log.Error(nil, "PVC storage requested but ome.io/pvc-name annotation is missing")
+			return
+		}
+
+		modelVolume := corev1.Volume{
+			Name: b.BaseModelMeta.Name,
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: pvcName,
+					ReadOnly:  true,
+				},
+			},
+		}
+		podSpec.Volumes = append(podSpec.Volumes, modelVolume)
+
+		b.Log.Info("Using PVC storage for model",
+			"pvcName", pvcName,
+			"inferenceService", isvc.Name)
+
+		// Continue with other volumes (emptyDir, configMap)
+	} else if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModel.Storage.Path != nil && b.BaseModelMeta != nil {
+		// Add model volume if base model is specified (hostPath - existing logic)
 		modelVolume := corev1.Volume{
 			Name: b.BaseModelMeta.Name,
 			VolumeSource: corev1.VolumeSource{
