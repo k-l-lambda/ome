@@ -47,16 +47,11 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     -ldflags "-X github.com/sgl-project/ome/pkg/version.GitVersion=${GIT_TAG} -X github.com/sgl-project/ome/pkg/version.GitCommit=${GIT_COMMIT}" \
     -o manager ./cmd/manager
 
-# Use debian12:bookworm-slim as runtime for exact glibc match with golang:1.24
-# This ensures both glibc 2.38 and OpenSSL 3.x are available
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y \
-    ca-certificates \
-    libssl3 \
-    && rm -rf /var/lib/apt/lists/* \
-    && adduser --uid 65532 --disabled-password --gecos "" --shell /bin/false nonroot
+# Use the same golang:1.24 base as builder for runtime to ensure exact compatibility
+# This guarantees matching glibc 2.38, OpenSSL 3.x, and all dependencies
+FROM golang:1.24
 WORKDIR /
 COPY --from=builder /workspace/manager .
-USER 65532:65532
+USER 65534:65534
 
 ENTRYPOINT ["/manager"]
