@@ -54,9 +54,9 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd -u 65532 -r -s /bin/false nonroot
+    && adduser --uid 65532 --disabled-password --gecos "" --shell /bin/false nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
-USER nonroot:nonroot
+USER 65532:65532
 
 ENTRYPOINT ["/manager"]
