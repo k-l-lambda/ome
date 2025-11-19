@@ -47,11 +47,16 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     -ldflags "-X github.com/sgl-project/ome/pkg/version.GitVersion=${GIT_TAG} -X github.com/sgl-project/ome/pkg/version.GitCommit=${GIT_COMMIT}" \
     -o manager ./cmd/manager
 
-# Use distroless cc image for CGO binaries with C dependencies
-# Note: We need cc-debian12 (Bookworm) to match golang:1.24 base which uses OpenSSL 3.x
-FROM gcr.io/distroless/cc-debian12:nonroot
+# Use debian12:bookworm-slim as runtime for exact glibc match with golang:1.24
+# This ensures both glibc 2.38 and OpenSSL 3.x are available
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -u 65532 -r -s /bin/false nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
-USER 65532:65532
+USER nonroot:nonroot
 
 ENTRYPOINT ["/manager"]
