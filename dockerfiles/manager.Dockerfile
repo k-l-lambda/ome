@@ -47,9 +47,9 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     -ldflags "-X github.com/sgl-project/ome/pkg/version.GitVersion=${GIT_TAG} -X github.com/sgl-project/ome/pkg/version.GitCommit=${GIT_COMMIT}" \
     -o manager ./cmd/manager
 
-# Use distroless as minimal base image to package the manager binary
-# Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static:nonroot
+# Use distroless base image with libc for CGO binaries
+# Note: We need base-debian11, not static, because the manager uses CGO (for XET library)
+FROM gcr.io/distroless/base-debian11:nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532
